@@ -1,0 +1,7 @@
+_site/*
+.ensime
+Relate.sublime-project
+Relate.sublime-workspace
+lib_managed/*
+target/*
+

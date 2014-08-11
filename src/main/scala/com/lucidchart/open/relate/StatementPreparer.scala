@@ -1,6 +1,7 @@
 package com.lucidchart.open.relate
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
+import scalaz.effect.IO
 
 private[relate] sealed trait StatementPreparer {
 
@@ -10,7 +11,7 @@ private[relate] sealed trait StatementPreparer {
   val stmt = prepare()
 
   protected def prepare(): PreparedStatement
-  protected def results(): ResultSet
+  protected def results(): IO[ResultSet]
   def connection: Connection
 
   /**
@@ -18,14 +19,18 @@ private[relate] sealed trait StatementPreparer {
    * @param callback the function to call on the results of the query
    * @return whatever the callback returns
    */
-  def execute[A](callback: (SqlResult) => A): A = {
+  def execute[A](callback: (SqlResult) => IO[A]): IO[A] = {
     try {
-      val resultSet = results()
-      try {
-        callback(SqlResult(resultSet))
-      }
-      finally {
-        resultSet.close()
+      for {
+        resultSet <- results()
+        ret <- callback(SqlResult(resultSet))
+      } yield {
+        try {
+          ret
+        }
+        finally {
+          resultSet.close()
+        }
       }
     }
     finally {
@@ -37,9 +42,9 @@ private[relate] sealed trait StatementPreparer {
    * Execute the query and close
    * @return if the query succeeded or not
    */
-  def execute(): Boolean = {
+  def execute(): IO[Boolean] = {
     try {
-      stmt.execute()
+      IO { stmt.execute() }
     }
     finally {
       stmt.close()
@@ -50,9 +55,9 @@ private[relate] sealed trait StatementPreparer {
    * Execute the query and close
    * @return the number of rows affected by the query
    */
-  def executeUpdate(): Int = {
+  def executeUpdate(): IO[Int] = {
     try {
-      stmt.executeUpdate()
+      IO { stmt.executeUpdate() }
     }
     finally {
       stmt.close()
@@ -88,7 +93,7 @@ private[relate] case class NormalStatementPreparer(queryParams: QueryParams, con
    * Get the results of excutioning this statement
    * @return the resulting ResultSet
    */
-  protected override def results(): ResultSet = {
+  protected override def results(): IO[ResultSet] = IO {
     stmt.executeQuery()
   }
 }
@@ -108,7 +113,7 @@ private[relate] case class InsertionStatementPreparer(queryParams: QueryParams, 
    * Get the results of executing this insertion statement
    * @return the ResultSet
    */
-  protected override def results(): ResultSet = {
+  protected override def results(): IO[ResultSet] = IO {
     stmt.executeUpdate()
     stmt.getGeneratedKeys()
   }
@@ -141,15 +146,18 @@ private[relate] case class StreamedStatementPreparer(queryParams: QueryParams, c
    * @param callback the function to call on the results of the query
    * @return whatever the callback returns
    */
-  override def execute[A](callback: (SqlResult) => A): A = {
-    callback(SqlResult(results()))
+  override def execute[A](callback: (SqlResult) => IO[A]): IO[A] = {
+    for {
+      res <- results()
+      ret <- callback(SqlResult(res))
+    } yield (ret)
   }
 
   /**
    * Get the results of executing this statement with a streaming ResultSet
    * @return the ResultSet
    */
-  protected override def results(): ResultSet = {
-    stmt.executeQuery()
+  protected override def results(): IO[ResultSet] = {
+    IO { stmt.executeQuery() }
   }
 }

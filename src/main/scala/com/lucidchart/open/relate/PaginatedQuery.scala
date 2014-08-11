@@ -2,6 +2,7 @@ package com.lucidchart.open.relate
 
 import java.sql.Connection
 import scala.collection.mutable.ArrayBuffer
+import scalaz.effect.IO
 
 /**
  * The PaginatedQuery companion object supplies apply methods that will create new
@@ -28,7 +29,7 @@ object PaginatedQuery {
    * @return a Stream over all the records returned by the query, getting a new page of results
    * when the current one is exhausted
    */
-  def apply[A](parser: RowParser[A])(getNextStmt: Option[A] => Sql)(implicit connection: Connection): Stream[A] = {
+  def apply[A](parser: RowParser[A])(getNextStmt: Option[A] => Sql)(implicit connection: Connection): IO[Stream[A]] = {
     new PaginatedQuery(parser, connection).withQuery(getNextStmt)
   }
 
@@ -44,7 +45,7 @@ object PaginatedQuery {
    * @return a Stream over all the records returned by the query, getting a new page of results
    * when the current one is exhausted
    */
-  def apply[A](parser: RowParser[A], limit: Int, startingOffset: Long)(query: Sql)(implicit connection: Connection): Stream[A] = {
+  def apply[A](parser: RowParser[A], limit: Int, startingOffset: Long)(query: Sql)(implicit connection: Connection): IO[Stream[A]] = {
     new PaginatedQuery(parser, connection).withLimitAndOffset(limit, startingOffset, query)
   }
 }
@@ -61,13 +62,13 @@ private[relate] class PaginatedQuery[A](parser: RowParser[A], connection: Connec
    * and return a new statement to get the next page of results
    * @return a stream of results
    */
-  private def withQuery(getNextStmt: Option[A] => Sql): Stream[A] = {
+  private def withQuery(getNextStmt: Option[A] => Sql): IO[Stream[A]] = {
     /**
      * Get the next page of results
      * @param lastRecord the last record of the previous page
      * @return a stream of the records in the page
      */
-    def page(lastRecord: Option[A]): ArrayBuffer[A] = {
+    def page(lastRecord: Option[A]): IO[ArrayBuffer[A]] = {
       val sql = getNextStmt(lastRecord)
       implicit val c = connection
       sql.asCollection[A, ArrayBuffer](parser)
@@ -78,13 +79,15 @@ private[relate] class PaginatedQuery[A](parser: RowParser[A], connection: Connec
      * @param lastRecord the last record of the previous page
      * @return a stream of records
      */
-    def records(lastRecord: Option[A]): Stream[A] = {
-      val currentPage = page(lastRecord)
-      if (!currentPage.isEmpty) {
-        currentPage.toStream #::: records(Some(currentPage.last))
-      }
-      else {
-        Stream.Empty
+    def records(lastRecord: Option[A]): IO[Stream[A]] = {
+      for {
+        currentPage <- page(lastRecord)
+        rec <- records(Some(currentPage.last))
+      } yield {
+        if (!currentPage.isEmpty)
+          currentPage.toStream #::: rec
+        else
+          Stream.Empty
       }
     }
 
@@ -98,7 +101,7 @@ private[relate] class PaginatedQuery[A](parser: RowParser[A], connection: Connec
    * @param query the Sql object to use as the query (should have all parameters substituted in already)
    * @return whatever the callback returns
    */
-  private def withLimitAndOffset(limit: Int, startingOffset: Long, query: Sql): Stream[A] = {
+  private def withLimitAndOffset(limit: Int, startingOffset: Long, query: Sql): IO[Stream[A]] = {
     val queryParams = query.queryParams
     val queryString = query.queryParams.query
     /**
@@ -106,9 +109,11 @@ private[relate] class PaginatedQuery[A](parser: RowParser[A], connection: Connec
      * @param offset how much to offset into the results
      * @return a stream of the records in the page
      */
-    def page(offset: Long): Stream[A] = {
+    def page(offset: Long): IO[Stream[A]] = {
       val newParams = queryParams.copy(query = queryString + " LIMIT " + limit + " OFFSET " + offset)
-      NormalStatementPreparer(newParams, connection).execute(_.asIterable(parser)).toStream
+      for {
+        res <- NormalStatementPreparer(newParams, connection).execute(_.asIterable(parser))
+      } yield (res.toStream)
     }
 
     /**
@@ -116,13 +121,15 @@ private[relate] class PaginatedQuery[A](parser: RowParser[A], connection: Connec
      * @param offset the offset into the database results
      * @return a stream of results
      */
-    def records(offset: Long): Stream[A] = {
-      val currentPage = page(offset)
-      if (!currentPage.isEmpty) {
-        currentPage #::: records(offset + limit)
-      }
-      else {
-        Stream.Empty
+    def records(offset: Long): IO[Stream[A]] = {
+      for {
+        currentPage <- page(offset)
+        rec <- records(offset + limit)
+      } yield {
+        if (!currentPage.isEmpty) {
+          currentPage #::: rec
+        } else
+          Stream.Empty
       }
     }
 

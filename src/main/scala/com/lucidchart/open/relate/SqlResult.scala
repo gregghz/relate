@@ -22,6 +22,7 @@ import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.Builder
 import scala.collection.mutable.MutableList
 import scala.util.Try
+  import scalaz.effect.IO
 
 object SqlResult {
   def apply(resultSet: java.sql.ResultSet) = new SqlResult(resultSet)
@@ -51,16 +52,16 @@ class SqlResult(val resultSet: java.sql.ResultSet) {
     }
   }
 
-  def asSingle[A](parser: RowParser[A]): A = asCollection[A, Seq](parser, 1).head
-  def asSingleOption[A](parser: RowParser[A]): Option[A] = asCollection[A, Seq](parser, 1).headOption
-  def asSet[A](parser: RowParser[A]): Set[A] = asCollection[A, Set](parser, Long.MaxValue)
-  def asSeq[A](parser: RowParser[A]): Seq[A] = asCollection[A, Seq](parser, Long.MaxValue)
-  def asIterable[A](parser: RowParser[A]): Iterable[A] = asCollection[A, Iterable](parser, Long.MaxValue)
-  def asList[A](parser: RowParser[A]): List[A] = asCollection[A, List](parser, Long.MaxValue)
-  def asMap[U, V](parser: RowParser[(U, V)]): Map[U, V] = asPairCollection[U, V, Map](parser, Long.MaxValue)
+  def asSingle[A](parser: RowParser[A]): IO[A] = for (col <- asCollection[A, Seq](parser, 1)) yield (col.head)
+  def asSingleOption[A](parser: RowParser[A]): IO[Option[A]] = for (col <- asCollection[A, Seq](parser, 1)) yield (col.headOption)
+  def asSet[A](parser: RowParser[A]): IO[Set[A]] = asCollection[A, Set](parser, Long.MaxValue)
+  def asSeq[A](parser: RowParser[A]): IO[Seq[A]] = asCollection[A, Seq](parser, Long.MaxValue)
+  def asIterable[A](parser: RowParser[A]): IO[Iterable[A]] = asCollection[A, Iterable](parser, Long.MaxValue)
+  def asList[A](parser: RowParser[A]): IO[List[A]] = asCollection[A, List](parser, Long.MaxValue)
+  def asMap[U, V](parser: RowParser[(U, V)]): IO[Map[U, V]] = asPairCollection[U, V, Map](parser, Long.MaxValue)
   
-  def asScalar[A](): A = asScalarOption.get
-  def asScalarOption[A](): Option[A] = {
+  def asScalar[A](): IO[A] = for (sca <- asScalarOption) yield (sca.get)
+  def asScalarOption[A](): IO[Option[A]] = IO {
     if (resultSet.next()) {
       Some(resultSet.getObject(1).asInstanceOf[A])
     }
@@ -69,26 +70,26 @@ class SqlResult(val resultSet: java.sql.ResultSet) {
     }
   }
 
-  def asCollection[U, T[_]](parser: RowParser[U])(implicit cbf: CanBuildFrom[T[U], U, T[U]]): T[U] = asCollection(parser, Long.MaxValue)
-  protected def asCollection[U, T[_]](parser: RowParser[U], maxRows: Long)(implicit cbf: CanBuildFrom[T[U], U, T[U]]): T[U] = {
+  def asCollection[U, T[_]](parser: RowParser[U])(implicit cbf: CanBuildFrom[T[U], U, T[U]]): IO[T[U]] = asCollection(parser, Long.MaxValue)
+  protected def asCollection[U, T[_]](parser: RowParser[U], maxRows: Long)(implicit cbf: CanBuildFrom[T[U], U, T[U]]): IO[T[U]] = IO {
     val builder = cbf()
 
     withResultSet { resultSet =>
       while (resultSet.getRow < maxRows && resultSet.next()) {
-        builder += parser(this)
+        for (p <- parser(this)) yield (builder += p)
       }
     }
 
     builder.result
   }
 
-  def asPairCollection[U, V, T[_, _]](parser: RowParser[(U, V)])(implicit cbf: CanBuildFrom[T[U, V], (U, V), T[U, V]]): T[U, V] = asPairCollection(parser, Long.MaxValue)
-  protected def asPairCollection[U, V, T[_, _]](parser: RowParser[(U, V)], maxRows: Long)(implicit cbf: CanBuildFrom[T[U, V], (U, V), T[U, V]]): T[U, V] = {
+  def asPairCollection[U, V, T[_, _]](parser: RowParser[(U, V)])(implicit cbf: CanBuildFrom[T[U, V], (U, V), T[U, V]]): IO[T[U, V]] = asPairCollection(parser, Long.MaxValue)
+  protected def asPairCollection[U, V, T[_, _]](parser: RowParser[(U, V)], maxRows: Long)(implicit cbf: CanBuildFrom[T[U, V], (U, V), T[U, V]]): IO[T[U, V]] = IO {
     val builder = cbf()
 
     withResultSet { resultSet =>
       while (resultSet.getRow < maxRows && resultSet.next()) {
-        builder += parser(this)
+        for (p <- parser(this)) yield (builder += p)
       }
     }
 

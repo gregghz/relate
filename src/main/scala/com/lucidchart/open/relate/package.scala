@@ -3,6 +3,7 @@ package com.lucidchart.open
 import java.sql.Connection
 import java.sql.Date
 import java.util.UUID
+import scalaz.effect.IO
 
 /**
  * Relate API
@@ -25,6 +26,6 @@ package object relate {
    * val query = SQL("SELECT * FROM users")
    * }}}
    */
-  def SQL(stmt: String): ExpandableQuery = Relate.sql(stmt)
+  def SQL(stmt: String): IO[ExpandableQuery] = Relate.sql(stmt)
 
 }

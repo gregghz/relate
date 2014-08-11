@@ -3,6 +3,7 @@ package com.lucidchart.open.relate
 import java.sql.{Connection, PreparedStatement}
 import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable
+import scalaz.effect.IO
 
 /** A query object that can be expanded */
 private[relate] case class ExpandableQuery(
@@ -247,7 +248,7 @@ sealed trait Sql {
    * @param connection the db connection to use when executing the query
    * @return whether the query succeeded in its execution
    */
-  def execute()(implicit connection: Connection): Boolean = {
+  def execute()(implicit connection: Connection): IO[Boolean] = {
     NormalStatementPreparer(queryParams, connection).execute()
   }
 
@@ -256,7 +257,7 @@ sealed trait Sql {
    * @param connection the db connection to use when executing the query
    * @return the number of rows update by the query
    */
-  def executeUpdate()(implicit connection: Connection): Int = {
+  def executeUpdate()(implicit connection: Connection): IO[Int] = {
     NormalStatementPreparer(queryParams, connection).executeUpdate()
   }
 
@@ -265,28 +266,28 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the auto-incremented key as an Int
    */
-  def executeInsertInt()(implicit connection: Connection): Int = InsertionStatementPreparer(queryParams, connection).execute(_.asSingle(RowParser.insertInt))
+  def executeInsertInt()(implicit connection: Connection): IO[Int] = InsertionStatementPreparer(queryParams, connection).execute(_.asSingle(RowParser.insertInt))
   
   /**
    * Execute the query and get the auto-incremented keys as a List of Ints
    * @param connection the connection to use when executing the query
    * @return the auto-incremented keys as a List of Ints
    */
-  def executeInsertInts()(implicit connection: Connection): List[Int] = InsertionStatementPreparer(queryParams, connection).execute(_.asList(RowParser.insertInt))
+  def executeInsertInts()(implicit connection: Connection): IO[List[Int]] = InsertionStatementPreparer(queryParams, connection).execute(_.asList(RowParser.insertInt))
   
   /**
    * Execute the query and get the auto-incremented key as a Long
    * @param connection the connection to use when executing the query
    * @return the auto-incremented key as a Long
    */
-  def executeInsertLong()(implicit connection: Connection): Long = InsertionStatementPreparer(queryParams, connection).execute(_.asSingle(RowParser.insertLong))
+  def executeInsertLong()(implicit connection: Connection): IO[Long] = InsertionStatementPreparer(queryParams, connection).execute(_.asSingle(RowParser.insertLong))
   
   /**
    * Execute the query and get the auto-incremented keys as a a List of Longs
    * @param connection the connection to use when executing the query
    * @return the auto-incremented keys as a a List of Longs
    */
-  def executeInsertLongs()(implicit connection: Connection): List[Long] = InsertionStatementPreparer(queryParams, connection).execute(_.asList(RowParser.insertLong))
+  def executeInsertLongs()(implicit connection: Connection): IO[List[Long]] = InsertionStatementPreparer(queryParams, connection).execute(_.asList(RowParser.insertLong))
 
   /**
    * Execute the query and get the auto-incremented key using a RowParser. Provided for the case
@@ -295,7 +296,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the auto-incremented key
    */
-  def executeInsertSingle[U](parser: RowParser[U])(implicit connection: Connection): U = InsertionStatementPreparer(queryParams, connection).execute(_.asSingle(parser))
+  def executeInsertSingle[U](parser: RowParser[U])(implicit connection: Connection): IO[U] = InsertionStatementPreparer(queryParams, connection).execute(_.asSingle(parser))
   
   /**
    * Execute the query and get the auto-incremented keys using a RowParser. Provided for the case
@@ -304,7 +305,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the auto-incremented keys
    */
-  def executeInsertCollection[U, T[_]](parser: RowParser[U])(implicit cbf: CanBuildFrom[T[U], U, T[U]], connection: Connection): T[U] = InsertionStatementPreparer(queryParams, connection).execute(_.asCollection(parser))
+  def executeInsertCollection[U, T[_]](parser: RowParser[U])(implicit cbf: CanBuildFrom[T[U], U, T[U]], connection: Connection): IO[T[U]] = InsertionStatementPreparer(queryParams, connection).execute(_.asCollection(parser))
 
   /**
    * Execute this query and get back the result as a single record
@@ -312,7 +313,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as a single record
    */
-  def asSingle[A](parser: RowParser[A])(implicit connection: Connection): A = NormalStatementPreparer(queryParams, connection).execute(_.asSingle(parser))
+  def asSingle[A](parser: RowParser[A])(implicit connection: Connection): IO[A] = NormalStatementPreparer(queryParams, connection).execute(_.asSingle(parser))
   
   /**
    * Execute this query and get back the result as an optional single record
@@ -320,7 +321,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as an optional single record
    */
-  def asSingleOption[A](parser: RowParser[A])(implicit connection: Connection): Option[A] = NormalStatementPreparer(queryParams, connection).execute(_.asSingleOption(parser))
+  def asSingleOption[A](parser: RowParser[A])(implicit connection: Connection): IO[Option[A]] = NormalStatementPreparer(queryParams, connection).execute(_.asSingleOption(parser))
   
   /**
    * Execute this query and get back the result as a Set of records
@@ -328,7 +329,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as a Set of records
    */
-  def asSet[A](parser: RowParser[A])(implicit connection: Connection): Set[A] = NormalStatementPreparer(queryParams, connection).execute(_.asSet(parser))
+  def asSet[A](parser: RowParser[A])(implicit connection: Connection): IO[Set[A]] = NormalStatementPreparer(queryParams, connection).execute(_.asSet(parser))
   
   /**
    * Execute this query and get back the result as a sequence of records
@@ -336,7 +337,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as a sequence of records
    */
-  def asSeq[A](parser: RowParser[A])(implicit connection: Connection): Seq[A] = NormalStatementPreparer(queryParams, connection).execute(_.asSeq(parser))
+  def asSeq[A](parser: RowParser[A])(implicit connection: Connection): IO[Seq[A]] = NormalStatementPreparer(queryParams, connection).execute(_.asSeq(parser))
   
   /**
    * Execute this query and get back the result as an iterable of records
@@ -344,7 +345,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as an iterable of records
    */
-  def asIterable[A](parser: RowParser[A])(implicit connection: Connection): Iterable[A] = NormalStatementPreparer(queryParams, connection).execute(_.asIterable(parser))
+  def asIterable[A](parser: RowParser[A])(implicit connection: Connection): IO[Iterable[A]] = NormalStatementPreparer(queryParams, connection).execute(_.asIterable(parser))
   
   /**
    * Execute this query and get back the result as a List of records
@@ -352,7 +353,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as a List of records
    */
-  def asList[A](parser: RowParser[A])(implicit connection: Connection): List[A] = NormalStatementPreparer(queryParams, connection).execute(_.asList(parser))
+  def asList[A](parser: RowParser[A])(implicit connection: Connection): IO[List[A]] = NormalStatementPreparer(queryParams, connection).execute(_.asList(parser))
   
   /**
    * Execute this query and get back the result as a Map of records
@@ -361,7 +362,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as a Map of records
    */
-  def asMap[U, V](parser: RowParser[(U, V)])(implicit connection: Connection): Map[U, V] = NormalStatementPreparer(queryParams, connection).execute(_.asMap(parser))
+  def asMap[U, V](parser: RowParser[(U, V)])(implicit connection: Connection): IO[Map[U, V]] = NormalStatementPreparer(queryParams, connection).execute(_.asMap(parser))
   
   /**
    * Execute this query and get back the result as a single value. Assumes that there is only one
@@ -369,7 +370,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as a single value
    */
-  def asScalar[A]()(implicit connection: Connection): A = NormalStatementPreparer(queryParams, connection).execute(_.asScalar[A]())
+  def asScalar[A]()(implicit connection: Connection): IO[A] = NormalStatementPreparer(queryParams, connection).execute(_.asScalar[A]())
   
   /**
    * Execute this query and get back the result as an optional single value. Assumes that there is 
@@ -378,7 +379,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as an optional single value
    */
-  def asScalarOption[A]()(implicit connection: Connection): Option[A] = NormalStatementPreparer(queryParams, connection).execute(_.asScalarOption[A]())
+  def asScalarOption[A]()(implicit connection: Connection): IO[Option[A]] = NormalStatementPreparer(queryParams, connection).execute(_.asScalarOption[A]())
   
   /**
    * Execute this query and get back the result as an arbitrary collection of records
@@ -386,7 +387,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as an arbitrary collection of records
    */
-  def asCollection[U, T[_]](parser: RowParser[U])(implicit cbf: CanBuildFrom[T[U], U, T[U]], connection: Connection): T[U] = NormalStatementPreparer(queryParams, connection).execute(_.asCollection(parser))
+  def asCollection[U, T[_]](parser: RowParser[U])(implicit cbf: CanBuildFrom[T[U], U, T[U]], connection: Connection): IO[T[U]] = NormalStatementPreparer(queryParams, connection).execute(_.asCollection(parser))
   
   /**
    * Execute this query and get back the result as an arbitrary collection of key value pairs
@@ -394,7 +395,7 @@ sealed trait Sql {
    * @param connection the connection to use when executing the query
    * @return the results as an arbitrary collection of key value pairs
    */
-  def asPairCollection[U, V, T[_, _]](parser: RowParser[(U, V)])(implicit cbf: CanBuildFrom[T[U, V], (U, V), T[U, V]], connection: Connection): T[U, V] = NormalStatementPreparer(queryParams, connection).execute(_.asPairCollection(parser))
+  def asPairCollection[U, V, T[_, _]](parser: RowParser[(U, V)])(implicit cbf: CanBuildFrom[T[U, V], (U, V), T[U, V]], connection: Connection): IO[T[U, V]] = NormalStatementPreparer(queryParams, connection).execute(_.asPairCollection(parser))
   
   /**
    * The asIterator method returns an Iterator that will stream data out of the database.
@@ -406,8 +407,8 @@ sealed trait Sql {
    * is MySQL, the fetchSize will always default to Int.MinValue, as MySQL's JDBC implementation
    * ignores all other fetchSize values and only streams if fetchSize is Int.MinValue
    */
-  def asIterator[A](parser: RowParser[A], fetchSize: Int = 100)(implicit connection: Connection): Iterator[A] = {
+  def asIterator[A](parser: RowParser[A], fetchSize: Int = 100)(implicit connection: Connection): IO[Iterator[A]] = {
     val prepared = StreamedStatementPreparer(queryParams, connection, fetchSize)
-    prepared.execute(RowIterator(parser, prepared.stmt, _))
+    prepared.execute(x => IO(RowIterator(parser, prepared.stmt, IO(x))))
   }
 }

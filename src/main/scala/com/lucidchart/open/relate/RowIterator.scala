@@ -1,14 +1,15 @@
 package com.lucidchart.open.relate
 
 import java.sql.PreparedStatement
+import scalaz.effect.IO
 
 private[relate] object RowIterator {
-  def apply[A](parser: RowParser[A], stmt: PreparedStatement, resultSet: SqlResult) = new RowIterator(parser, stmt, resultSet)
+  def apply[A](parser: RowParser[A], stmt: PreparedStatement, resultSet: IO[SqlResult]) = new RowIterator(parser, stmt, resultSet)
 }
 
-private[relate] class RowIterator[A](parser: RowParser[A], stmt: PreparedStatement, result: SqlResult) extends Iterator[A] {
+private[relate] class RowIterator[A](parser: RowParser[A], stmt: PreparedStatement, result: IO[SqlResult]) extends Iterator[A] {
 
-  private var _hasNext = result.next()
+  private var _hasNext: IO[Boolean] = for (res <- result) yield (res.next())
 
   /**
    * Make certain that all resources are closed
@@ -21,34 +22,43 @@ private[relate] class RowIterator[A](parser: RowParser[A], stmt: PreparedStateme
    * Determine whether there is another row or not
    * @return whether there is another row
    */
-  override def hasNext(): Boolean = _hasNext
+  override def hasNext(): Boolean = _hasNext.unsafePerformIO()
 
   /**
    * Parse the next row using the RowParser passed into the class
    * @return the parsed record
    */
   override def next(): A = {
-    val ret = parser(result)
-    if (_hasNext) {
-      _hasNext = result.next()
-    }
+    (for {
+      res <- result
+      hasNext <- _hasNext
+      ret <- parser(res)
+    } yield {
+      if (hasNext) {
+        _hasNext = for (res <- result) yield (res.next())
+      }
 
-    //if we've iterated through the whole thing, close resources
-    if (!_hasNext) {
-      close()
-    }
-    ret
+      if (!hasNext) {
+        for (_ <- close()) yield ()
+      }
+
+      ret
+    }).unsafePerformIO
   }
 
   /**
    * Close up resources
    */
-  private def close(): Unit = {
+  private def close(): IO[Unit] = {
     if (!stmt.isClosed()) {
       stmt.close()
     }
-    if (!result.resultSet.isClosed()) {
-      result.resultSet.close()
+
+    for {
+      res <- result
+    } yield {
+      if (!res.resultSet.isClosed())
+        res.resultSet.close()
     }
   }
 

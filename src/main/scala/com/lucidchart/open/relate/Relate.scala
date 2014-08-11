@@ -1,6 +1,7 @@
 package com.lucidchart.open.relate
 
 import java.sql.Connection
+import scalaz.effect.IO
 
 private[relate] object Relate {
 
@@ -9,6 +10,6 @@ private[relate] object Relate {
    * @param stmt the SQL statement
    * @return the corresponding SqlQuery object
    */
-  private[relate] def sql(stmt: String) = ExpandableQuery(stmt)
+  private[relate] def sql(stmt: String) = IO { ExpandableQuery(stmt) }
 
 }

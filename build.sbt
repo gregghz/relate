@@ -15,6 +15,8 @@ autoScalaLibrary := true
 retrieveManaged := true
 
 libraryDependencies ++= Seq(
+  "org.scalaz" %% "scalaz-core" % "7.0.6",
+  "org.scalaz" %% "scalaz-effect" % "7.0.6",
   "org.specs2" %% "specs2" % "2.3.12" % "test",
   "mysql" % "mysql-connector-java" % "5.1.23"
 )
